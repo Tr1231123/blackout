@@ -1,0 +1,149 @@
+local rs = game.ReplicatedStorage
+local Events = rs:WaitForChild("Events")
+
+local mods = rs:WaitForChild("Mods")
+local SliderMod = require(mods:WaitForChild("SilversUiSliders"))
+
+-- Gui Frames
+
+local plr = game.Players.LocalPlayer
+local Char = (plr.Character or plr.CharacterAdded:Wait())
+
+local BoomboxFrame = script.Parent
+local MainFrame = BoomboxFrame:WaitForChild("MainFrame")
+local TopBar = MainFrame:WaitForChild("TopBar")
+local CustomizeFrame = MainFrame:WaitForChild("CustomizeFrame")
+
+
+local MusicIdFrame = MainFrame:WaitForChild("MusicId")
+local MusicIdInput = MusicIdFrame:WaitForChild("IdText")
+
+local CloseButton = TopBar:WaitForChild("Close")
+local PlayButton = MainFrame:WaitForChild("Play")
+local PauseButton = MainFrame:WaitForChild("Pause")
+local StopButton = MainFrame:WaitForChild("Stop")
+
+
+local function toHMS(s)
+	return string.format("%02i:%02i", s/60%60, s%60)
+end
+
+Events:WaitForChild("Boombox"):WaitForChild("ToggleGui").OnClientEvent:Connect(function(bool)
+	if bool == true then
+		BoomboxFrame.Visible = true
+		script.Sounds.Click:Play()
+		
+	elseif bool == false then
+		if BoomboxFrame.Visible then
+			script.Sounds.Click:Play()
+		end
+		BoomboxFrame.Visible = false
+		for i,v in pairs(BoomboxFrame:GetChildren()) do
+			if v.Name == "ColorPicker" then
+				v:Destroy()
+			end
+		end
+	end
+end)
+
+Events:WaitForChild("Boombox"):WaitForChild("Customize").OnClientEvent:Connect(function(Color, Neon)
+	CustomizeFrame.CurrentColor.BackgroundColor3 = Color
+	CustomizeFrame.CurrentColor.TextLabel.Text  = math.floor(Color.R*255)..","..math.floor(Color.G*255)..","..math.floor(Color.B*255)
+	CustomizeFrame.NeonBoombox.Frame.Visible = Neon
+end)
+
+PlayButton.MouseButton1Click:Connect(function()
+	script.Sounds.Click:Play()
+	local MusicId
+	pcall(function()
+		MusicId = tonumber(MusicIdInput.Text)
+	end)
+	if not MusicId or MusicIdInput.Text == "" then
+		MusicIdInput.Text = "PLEASE ENTER A VALID ID"
+		wait(1)
+		MusicIdInput.Text = ""
+		return
+	end
+
+	-- Verificar se o som existe no ReplicatedStorage antes de reproduzi-lo
+	local sound = rs:FindFirstChild(tostring(MusicId))
+	if not sound:IsA("Sound") then
+		MusicIdInput.Text = "INVALID SOUND ID"
+		wait(1)
+		MusicIdInput.Text = ""
+		return
+	end
+
+	Events.Boombox.MusicState:FireServer("Play", MusicId)
+end)
+
+StopButton.MouseButton1Click:Connect(function()
+	script.Sounds.Click:Play()
+	Events.Boombox.MusicState:FireServer("Stop")
+end)
+
+PauseButton.MouseButton1Click:Connect(function()
+	script.Sounds.Click:Play()
+	Events.Boombox.MusicState:FireServer("Pause")
+end)
+
+CloseButton.MouseButton1Click:Connect(function()
+	BoomboxFrame.Visible = false
+	script.Sounds.Click:Play()
+	for i,v in pairs(BoomboxFrame:GetChildren()) do
+		if v.Name == "ColorPicker" then
+			v:Destroy()
+		end
+	end
+end)
+
+local NeonDeb = false
+CustomizeFrame:WaitForChild("NeonBoombox").MouseButton1Click:Connect(function()
+	if NeonDeb == false then
+		NeonDeb = true
+		script.Sounds.Click:Play()
+		if not BoomboxFrame:FindFirstChild("ColorPicker") then
+			Events.Boombox.Customize:FireServer(CustomizeFrame.CurrentColor.BackgroundColor3, not CustomizeFrame.NeonBoombox.Frame.Visible)
+		end
+		wait(.5)
+		NeonDeb = false
+	end
+end)
+
+CustomizeFrame:WaitForChild("ChangeColor").MouseButton1Click:Connect(function()
+	script.Sounds.Click:Play()
+	if not BoomboxFrame:FindFirstChild("ColorPicker") then
+		local ColorPicker = script.ColorPicker:Clone()
+		ColorPicker.Parent = BoomboxFrame
+		ColorPicker.ColorPickerLogic.Disabled = false
+		ColorPicker.Visible = true
+	end
+end)
+
+SliderMod:MakeSlider(MainFrame.MusicControls.Playbackspeed, .75, 1.25, .5)
+
+Events.Boombox:WaitForChild("GetCustomize"):FireServer()
+
+MainFrame.MusicControls.Playbackspeed:WaitForChild("CurrentValue").Changed:Connect(function(val)
+	Events.Boombox:WaitForChild("MusicControl"):FireServer(nil, val)
+end)
+
+local function OnPlaybackUpdate(currentValue)
+	Events.Boombox:WaitForChild("MusicControl"):FireServer(currentValue)
+end
+
+local UpdatePlaybackSlider = SliderMod:MakeSlider(MainFrame.MusicControls.Playback, 0, 125, .5, OnPlaybackUpdate, true)
+
+while wait(1) do
+	if Char and Char:FindFirstChild("Torso") then
+		local BoomboxSound = Char.Torso:FindFirstChild("BoomboxSound")
+		if BoomboxSound and BoomboxSound.IsPlaying == true and BoomboxSound.TimeLength > 0 then
+			MainFrame.MusicControls.Visible = true
+			MainFrame.BackgroundShadow.Visible = false
+			UpdatePlaybackSlider(0, BoomboxSound.TimeLength, BoomboxSound.TimePosition/BoomboxSound.TimeLength)
+		else
+			MainFrame.MusicControls.Visible = false
+			MainFrame.BackgroundShadow.Visible = true
+		end
+	end
+end
